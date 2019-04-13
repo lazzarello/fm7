@@ -11,7 +11,7 @@
 -- key 2: random modulation matrix
 -- key 3: play a random note
 
-local FM7 = require 'fm7'
+local FM7 = require 'fm7/lib/fm7'
 local tab = require 'tabutil'
 local pattern_time = require 'pattern_time'
 local UI = require 'ui'
