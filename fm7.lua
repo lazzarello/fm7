@@ -76,6 +76,9 @@ local ctrl_functions = {
 }
 
 function init()
+  m = midi.connect()
+  m.event = midi_event
+  
   pat = pattern_time.new()
   pat.process = grid_note_trans
 
@@ -247,9 +250,9 @@ function enc(n,delta)
     pages:set_index_delta(delta, true)
     --print("set algo ".. (pages.index - 1))
     if (pages.index - 1) < 10 then
-      params:read("fm7-0".. (pages.index - 1) .. ".pset")
+      params:read("/home/we/dust/code/fm7/data/fm7-0".. (pages.index - 1) .. ".pset")
     else
-      params:read("fm7-".. (pages.index - 1) .. ".pset")
+      params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
     end
   elseif n == 2 then
     print("encoder 2")
@@ -458,20 +461,36 @@ local function note_off(note, vel)
   nvoices = nvoices - 1
 end
 
-local function midi_event(data)
-  if data[1] == 144 then
-    if data[3] == 0 then
-      note_off(data[2])
-    else
-      note_on(data[2], data[3])
-    end
-  elseif data[1] == 128 then
-    note_off(data[2])
-  elseif data[1] == 176 then
-    --cc(data1, data2)
-  elseif data[1] == 224 then
-    --bend(data1, data2)
+function midi_event(data)
+  if #data == 0 then return end
+  local msg = midi.to_msg(data)
+
+  -- Note off
+  if msg.type == "note_off" then
+    note_off(msg.note)
+
+    -- Note on
+  elseif msg.type == "note_on" then
+    note_on(msg.note, msg.vel / 127)
+
+--[[
+    -- Key pressure
+  elseif msg.type == "key_pressure" then
+    set_key_pressure(msg.note, msg.val / 127)
+
+    -- Channel pressure
+  elseif msg.type == "channel_pressure" then
+    set_channel_pressure(msg.val / 127)
+
+    -- Pitch bend
+  elseif msg.type == "pitchbend" then
+    local bend_st = (util.round(msg.val / 2)) / 8192 * 2 -1 -- Convert to -1 to 1
+    local bend_range = params:get("bend_range")
+    set_pitch_bend(bend_st * bend_range)
+
+  ]]--
   end
+
 end
 
 midi.add = function(dev)
