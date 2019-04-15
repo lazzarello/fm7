@@ -329,7 +329,7 @@ local function draw_matrix_outputs()
       screen.move_rel(2, 6)
       screen.text(mods[m][n])
       screen.stroke()
-    end
+    end 
   end
   for m = 1,6 do
     screen.rect(80,m*9,9,9)
