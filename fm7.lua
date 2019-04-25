@@ -16,6 +16,9 @@ local tab = require 'tabutil'
 local pattern_time = require 'pattern_time'
 local UI = require 'ui'
 
+-- midi setup
+local midi_in_device
+
 local g = grid.connect()
 
 local mode_transpose = 0
@@ -76,6 +79,19 @@ local ctrl_functions = {
 }
 
 function init()
+  midi_in_device = midi.connect(1)
+  midi_in_device.event = midi_event
+
+  params:add{type = "number", id = "midi_device", name = "MIDI Device", min = 1, max = 4, default = 1, action = function(value)
+    midi_in_device.event = nil
+    midi_in_device = midi.connect(value)
+    midi_in_device.event = midi_event
+  end}
+
+  local channels = {"All"}
+  for i = 1, 16 do table.insert(channels, i) end
+  params:add{type = "option", id = "midi_channel", name = "MIDI Channel", options = channels}
+
   pat = pattern_time.new()
   pat.process = grid_note_trans
 
@@ -116,7 +132,7 @@ function init()
   end
   light = 0
   number = 3
-  
+
   pages = UI.Pages.new(1, 33)
 end
 
@@ -125,7 +141,7 @@ function g.key(x, y, z)
     if z == 1 and getEncoderMode() == y - 1 then
       setEncoderMode(1)
     elseif z == 1 then
-      setEncoderMode(y - 1) 
+      setEncoderMode(y - 1)
     end
   end
 
@@ -247,9 +263,9 @@ function enc(n,delta)
     pages:set_index_delta(delta, true)
     --print("set algo ".. (pages.index - 1))
     if (pages.index - 1) < 10 then
-      params:read("fm7-0".. (pages.index - 1) .. ".pset")
+      params:read("/home/we/dust/code/fm7/data/fm7-0".. (pages.index - 1) .. ".pset")
     else
-      params:read("fm7-".. (pages.index - 1) .. ".pset")
+      params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
     end
   elseif n == 2 then
     print("encoder 2")
@@ -271,13 +287,13 @@ function key(n,z)
       end
       params:set("carrier"..x,carriers[x])
     end
-    
+
     -- choose new random mods
     for i = 1,number do
       x = math.random(6)
       y = math.random(6)
       selected[x][y] = 1
-      mods[x][y] = 1 
+      mods[x][y] = 1
       carriers[x] = 1
       params:set("hz"..x.."_to_hz"..y,mods[x][y])
       params:set("carrier"..x,carriers[x])
@@ -313,7 +329,7 @@ local function draw_matrix_outputs()
       screen.move_rel(2, 6)
       screen.text(mods[m][n])
       screen.stroke()
-    end
+    end 
   end
   for m = 1,6 do
     screen.rect(80,m*9,9,9)
@@ -321,8 +337,8 @@ local function draw_matrix_outputs()
     screen.text("out "..m)
     screen.move_rel(-32,0)
     screen.text(carriers[m])
-    screen.stroke()    
-  end  
+    screen.stroke()
+  end
 end
 
 local function draw_algo_rel(num)
@@ -360,7 +376,7 @@ local function draw_algo_rel(num)
     screen.text(2)
     screen.stroke()
 end
-local algo_box_coords = 
+local algo_box_coords =
   {
 --[[
 absolute coords for operator box positions
@@ -369,7 +385,7 @@ absolute coords for operator box positions
 37|
 53|__ __ __ __ __ ___
    32 48 64 80 96 112
-   
+
     tuples in table are {x coord, y coord, connection_index,feedback_index}
 --]]
     {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,0},{64,21,4,0},{64,5,5,6}},
@@ -435,7 +451,7 @@ end
 function redraw()
   screen.clear()
   pages:redraw()
-  
+
   if pages.index == 1 then
     draw_matrix_outputs()
   else
@@ -458,25 +474,21 @@ local function note_off(note, vel)
   nvoices = nvoices - 1
 end
 
-local function midi_event(data)
-  if data[1] == 144 then
-    if data[3] == 0 then
-      note_off(data[2])
-    else
-      note_on(data[2], data[3])
-    end
-  elseif data[1] == 128 then
-    note_off(data[2])
-  elseif data[1] == 176 then
-    --cc(data1, data2)
-  elseif data[1] == 224 then
-    --bend(data1, data2)
-  end
-end
+function midi_event(data)
+  local msg = midi.to_msg(data)
+  local channel_param = params:get("midi_channel")
+  if channel_param == 1 or (channel_param > 1 and msg.ch == channel_param - 1) then
+    -- Note off
+    if msg.type == "note_off" then
+      note_off(msg.note)
 
-midi.add = function(dev)
-  print('earthsea: midi device added', dev.id, dev.name)
-  dev.event = midi_event
+    -- Note on
+    elseif msg.type == "note_on" then
+      note_on(msg.note, msg.vel / 127)
+
+    -- TODO: add in extra midi control params to engine
+    end
+  end
 end
 
 function cleanup()
