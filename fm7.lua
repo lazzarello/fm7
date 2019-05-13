@@ -1,12 +1,8 @@
 -- FM7
 --
 -- FM polysynth
--- controlled by grid or MIDI
+-- controlled by grid or MIDI and arc
 --
--- grid pattern player:
--- 1 1 record toggle
--- 1 2 play toggle
--- 1 8 transpose mode
 -- enc 1: change presets
 -- key 2: random modulation matrix
 -- key 3: play a random note
@@ -15,22 +11,27 @@ local FM7 = require 'fm7/lib/fm7'
 local tab = require 'tabutil'
 local pattern_time = require 'pattern_time'
 local UI = require 'ui'
+local MusicUtil = require "musicutil"
 
--- midi setup
-local midi_in_device
-
+tau = math.pi * 2
 local g = grid.connect()
+local a = arc.connect()
+local keys_pressed = 0
 
 local mode_transpose = 0
 local root = { x=5, y=5 }
 local trans = { x=5, y=5 }
 local lit = {}
 local encoder_mode = 1
-
+local start_pos = {6,2}
+local size = {6,6}
+  
 local screen_framerate = 15
 local screen_refresh_metro
 
 local MAX_NUM_VOICES = 16
+-- current count of active voices
+local nvoices = 0
 
 engine.name = 'FM7'
 
@@ -43,10 +44,9 @@ local function getHz(deg,oct)
 end
 
 local function getHzET(note)
-  return 55*2^(note/12)
+  hz = 55*2^(note/12)
+  return hz
 end
--- current count of active voices
-local nvoices = 0
 
 local function getEncoderMode()
   return encoder_mode
@@ -56,42 +56,80 @@ local function setEncoderMode(mode)
   encoder_mode = mode
 end
 
+local function draw_phase_matrix()
+  for y = start_pos[2], (start_pos[2] + size[2] - 1) do
+    for x = start_pos[1],(start_pos[1] + size[1] - 1) do
+      g:led(x,y,3)
+    end
+  end  
+end
+  --[[
+  Operator phase modulation matrix control for grid and arc
+  Pick Any Four operators
+  button press on grid performs the following sequence
+  1. check if we are <= 4 else do nothing
+  2. get current value from phase mod paramset
+  3. draw value to Arc LED ring
+  4. Enable Arc encoder to modulate parameter
+  button release disables Arc ring
 
-local ctrl_functions = {
-  function(arg) engine.hz1(arg) end,
-  function(arg) engine.hz2(arg) end,
-  function(arg) engine.hz3(arg) end,
-  function(arg) engine.hz4(arg) end,
-  function(arg) engine.hz5(arg) end,
-  function(arg) engine.hz6(arg) end,
-  function(arg) engine.phase1(arg) end,
-  function(arg) engine.phase2(arg) end,
-  function(arg) engine.phase3(arg) end,
-  function(arg) engine.phase4(arg) end,
-  function(arg) engine.phase5(arg) end,
-  function(arg) engine.phase6(arg) end,
-  function(arg) engine.amp1(arg) end,
-  function(arg) engine.amp2(arg) end,
-  function(arg) engine.amp3(arg) end,
-  function(arg) engine.amp4(arg) end,
-  function(arg) engine.amp5(arg) end,
-  function(arg) engine.amp6(arg) end,
-}
+  --]]
+arc_mapping = {"","","",""}
+
+function grid_state(x,y,z)
+  local op_out = x-start_pos[1]+1
+  local op_in = y-start_pos[2]+1
+  --print("setting arc control param to hz"..op_out.."_to_hz"..op_in)
+  if z == 1 then
+    if keys_pressed <= 4 then
+      arc_mapping[keys_pressed] = "hz"..op_out.."_to_hz"..op_in
+      a:segment(keys_pressed,0,params:get(arc_mapping[keys_pressed]),12)
+      g:led(x,y,12)
+    end
+  else
+    a:segment(keys_pressed+1,0,tau,0)
+    g:led(x,y,3)
+  end
+end
+
+function g.key(x,y,z)
+  --print(keys_pressed, "keys pressed going in")
+  if z == 1 then
+    keys_pressed = keys_pressed + 1
+    grid_state(x,y,z)
+    end
+  if z == 0 then
+    keys_pressed = keys_pressed - 1
+    --print("remove key "..x..","..y..": ",keys_pressed, "keys pressed")
+    grid_state(x,y,z)
+  end
+  g:refresh()
+  a:refresh()
+end
+
+local function light_arc(n,d)
+  params:delta(arc_mapping[n], d/10)
+  local val = params:get(arc_mapping[n])
+  a:segment(n,0,val,12)
+  a:refresh()
+end
+
+function a.delta(n,d)
+  if n == 1 then
+    light_arc(n,d)
+  elseif n == 2 then
+    light_arc(n,d)
+  elseif n == 3 then
+    light_arc(n,d)
+  elseif n == 4 then
+    light_arc(n,d)
+  end
+end
 
 function init()
-  midi_in_device = midi.connect(1)
-  midi_in_device.event = midi_event
-
-  params:add{type = "number", id = "midi_device", name = "MIDI Device", min = 1, max = 4, default = 1, action = function(value)
-    midi_in_device.event = nil
-    midi_in_device = midi.connect(value)
-    midi_in_device.event = midi_event
-  end}
-
-  local channels = {"All"}
-  for i = 1, 16 do table.insert(channels, i) end
-  params:add{type = "option", id = "midi_channel", name = "MIDI Channel", options = channels}
-
+  m = midi.connect()
+  m.event = midi_event
+  
   pat = pattern_time.new()
   pat.process = grid_note_trans
 
@@ -99,9 +137,6 @@ function init()
   engine.stopAll()
 
   FM7.add_params()
-
-  --params:read("tehn/earthsea.pset")
-  --params:bang()
 
   if g then gridredraw() end
 
@@ -132,16 +167,17 @@ function init()
   end
   light = 0
   number = 3
-
+  
   pages = UI.Pages.new(1, 33)
 end
 
+--[[
 function g.key(x, y, z)
   if x == 1 and (y > 2 and y < 8) then
     if z == 1 and getEncoderMode() == y - 1 then
       setEncoderMode(1)
     elseif z == 1 then
-      setEncoderMode(y - 1)
+      setEncoderMode(y - 1) 
     end
   end
 
@@ -194,6 +230,7 @@ function g.key(x, y, z)
   end
   gridredraw()
 end
+--]]
 
 function grid_note(e)
   local note = ((7-e.y)*5) + e.x
@@ -244,6 +281,7 @@ local function toggleModLED(mode)
 end
 
 function gridredraw()
+  --[[
   g:all(0)
   g:led(1,1,2 + pat.rec * 10)
   g:led(1,2,2 + pat.play * 10)
@@ -254,7 +292,8 @@ function gridredraw()
   for i,e in pairs(lit) do
     g:led(e.x, e.y,15)
   end
-
+  ]]--
+  draw_phase_matrix()
   g:refresh()
 end
 
@@ -287,13 +326,13 @@ function key(n,z)
       end
       params:set("carrier"..x,carriers[x])
     end
-
+    
     -- choose new random mods
     for i = 1,number do
       x = math.random(6)
       y = math.random(6)
       selected[x][y] = 1
-      mods[x][y] = 1
+      mods[x][y] = 1 
       carriers[x] = 1
       params:set("hz"..x.."_to_hz"..y,mods[x][y])
       params:set("carrier"..x,carriers[x])
@@ -329,7 +368,7 @@ local function draw_matrix_outputs()
       screen.move_rel(2, 6)
       screen.text(mods[m][n])
       screen.stroke()
-    end 
+    end
   end
   for m = 1,6 do
     screen.rect(80,m*9,9,9)
@@ -337,8 +376,8 @@ local function draw_matrix_outputs()
     screen.text("out "..m)
     screen.move_rel(-32,0)
     screen.text(carriers[m])
-    screen.stroke()
-  end
+    screen.stroke()    
+  end  
 end
 
 local function draw_algo_rel(num)
@@ -376,7 +415,7 @@ local function draw_algo_rel(num)
     screen.text(2)
     screen.stroke()
 end
-local algo_box_coords =
+local algo_box_coords = 
   {
 --[[
 absolute coords for operator box positions
@@ -385,7 +424,7 @@ absolute coords for operator box positions
 37|
 53|__ __ __ __ __ ___
    32 48 64 80 96 112
-
+   
     tuples in table are {x coord, y coord, connection_index,feedback_index}
 --]]
     {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,0},{64,21,4,0},{64,5,5,6}},
@@ -451,7 +490,7 @@ end
 function redraw()
   screen.clear()
   pages:redraw()
-
+  
   if pages.index == 1 then
     draw_matrix_outputs()
   else
@@ -464,7 +503,7 @@ end
 local function note_on(note, vel)
   if nvoices < MAX_NUM_VOICES then
     --engine.start(id, getHz(x, y-1))
-    engine.start(note, getHzET(note))
+    engine.start(note, MusicUtil.note_num_to_freq(note))
     nvoices = nvoices + 1
   end
 end
@@ -475,19 +514,33 @@ local function note_off(note, vel)
 end
 
 function midi_event(data)
+  if #data == 0 then return end
   local msg = midi.to_msg(data)
-  local channel_param = params:get("midi_channel")
-  if channel_param == 1 or (channel_param > 1 and msg.ch == channel_param - 1) then
-    -- Note off
-    if msg.type == "note_off" then
-      note_off(msg.note)
+
+  -- Note off
+  if msg.type == "note_off" then
+    note_off(msg.note)
 
     -- Note on
-    elseif msg.type == "note_on" then
-      note_on(msg.note, msg.vel / 127)
+  elseif msg.type == "note_on" then
+    note_on(msg.note, msg.vel / 127)
 
-    -- TODO: add in extra midi control params to engine
-    end
+--[[
+    -- Key pressure
+  elseif msg.type == "key_pressure" then
+    set_key_pressure(msg.note, msg.val / 127)
+
+    -- Channel pressure
+  elseif msg.type == "channel_pressure" then
+    set_channel_pressure(msg.val / 127)
+
+    -- Pitch bend
+  elseif msg.type == "pitchbend" then
+    local bend_st = (util.round(msg.val / 2)) / 8192 * 2 -1 -- Convert to -1 to 1
+    local bend_range = params:get("bend_range")
+    set_pitch_bend(bend_st * bend_range)
+
+  ]]--
   end
 end
 
