@@ -12,8 +12,6 @@ local tab = require 'tabutil'
 local pattern_time = require 'pattern_time'
 local UI = require 'ui'
 local MusicUtil = require "musicutil"
-
-tau = math.pi * 2
 local g = grid.connect()
 local a = arc.connect()
 local keys_pressed = 0
@@ -23,6 +21,7 @@ local root = { x=5, y=5 }
 local trans = { x=5, y=5 }
 local lit = {}
 local encoder_mode = 1
+-- top right button to start drawing our grid
 local start_pos = {6,2}
 local size = {6,6}
   
@@ -32,8 +31,10 @@ local screen_refresh_metro
 local MAX_NUM_VOICES = 16
 -- current count of active voices
 local nvoices = 0
+local toggles = {}
 
 engine.name = 'FM7'
+tau = math.pi * 2
 
 -- pythagorean minor/major, kinda
 local ratios = { 1, 9/8, 6/5, 5/4, 4/3, 3/2, 27/16, 16/9 }
@@ -63,53 +64,88 @@ local function draw_phase_matrix()
     end
   end  
 end
-  --[[
-  Operator phase modulation matrix control for grid and arc
-  Pick Any Four operators
-  button press on grid performs the following sequence
-  1. check if we are <= 4 else do nothing
-  2. get current value from phase mod paramset
-  3. draw value to Arc LED ring
-  4. Enable Arc encoder to modulate parameter
-  button release disables Arc ring
 
-  --]]
-arc_mapping = {"","","",""}
+arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
+
+local function grid_vector(x,y)
+  return (x-start_pos[1]+1) + ((y-start_pos[2]) * size[1])
+end
+
+local function get_toggles_value(x,y)
+  idx = grid_vector(x,y)
+  return toggles[idx]
+end
+
+local function set_toggles_value(x,y,val)
+  idx = grid_vector(x,y)
+  toggles[idx] = val
+end
+
+local function bool_to_int(value)
+  return value and 1 or 0
+end
+
+local function assign_next_arc_enc()
+  enc = 0
+  for i=1,4 do
+    if arc_mapping[i][2] == 0 then
+      print("assigning mapping for encoder",i)
+      arc_mapping[i][2] = i
+      enc = i
+      break
+    end
+  end
+  return enc
+end
+
+local function remove_arc_enc(x,y)
+  vec = grid_vector(x,y)
+  for i=1,4 do
+    if vec == arc_mapping[i][1] then
+      a:segment(arc_mapping[i][2],0,tau,0)
+      print("removing mapping for encoder",i)
+      arc_mapping[i] = {0,0,"none"}
+    end
+  end
+end
 
 function grid_state(x,y,z)
   local op_out = x-start_pos[1]+1
   local op_in = y-start_pos[2]+1
-  --print("setting arc control param to hz"..op_out.."_to_hz"..op_in)
+  local toggle = get_toggles_value(x,y)
   if z == 1 then
+    toggle = not toggle
+    set_toggles_value(x,y,toggle)
     if keys_pressed <= 4 then
-      arc_mapping[keys_pressed] = "hz"..op_out.."_to_hz"..op_in
-      a:segment(keys_pressed,0,params:get(arc_mapping[keys_pressed]),12)
-      g:led(x,y,12)
+      if toggle then
+        local arc_enc = assign_next_arc_enc()
+        arc_mapping[arc_enc] = {grid_vector(x,y),arc_enc,"hz"..op_out.."_to_hz"..op_in}
+        a:segment(arc_mapping[arc_enc][2],0,params:get(arc_mapping[arc_enc][3]),12)
+      else
+        remove_arc_enc(x,y)
+      end
     end
-  else
-    a:segment(keys_pressed+1,0,tau,0)
-    g:led(x,y,3)
   end
+  local s = bool_to_int(toggle)
+  g:led(x,y,3+s*9)
 end
 
 function g.key(x,y,z)
-  --print(keys_pressed, "keys pressed going in")
-  if z == 1 then
-    keys_pressed = keys_pressed + 1
-    grid_state(x,y,z)
+  if keys_pressed <= 4 then
+    if z == 1 and get_toggles_value(x,y) then
+      keys_pressed = keys_pressed -1
+    elseif z == 1 then
+      keys_pressed = keys_pressed + 1
     end
-  if z == 0 then
-    keys_pressed = keys_pressed - 1
-    --print("remove key "..x..","..y..": ",keys_pressed, "keys pressed")
-    grid_state(x,y,z)
   end
+  grid_state(x,y,z)
   g:refresh()
   a:refresh()
 end
 
 local function light_arc(n,d)
-  params:delta(arc_mapping[n], d/10)
-  local val = params:get(arc_mapping[n])
+  params:delta(arc_mapping[n][3], d/10)
+  local val = params:get(arc_mapping[n][3])
   a:segment(n,0,val,12)
   a:refresh()
 end
@@ -152,6 +188,7 @@ function init()
     startup_ani_count = startup_ani_count + 1
   end
   startup_ani_metro:start( 0.1, 3 )
+  
   ph_position,hz_position,amp_position = 0,0,0
   selected = {}
   mods = {}
@@ -167,7 +204,11 @@ function init()
   end
   light = 0
   number = 3
-  
+-- fill up our toggle table with false values
+  for i=1,6*6 do
+    table.insert(toggles,false)
+  end
+
   pages = UI.Pages.new(1, 33)
 end
 
@@ -306,11 +347,6 @@ function enc(n,delta)
     else
       params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
     end
-  elseif n == 2 then
-    print("encoder 2")
-
-  elseif n == 3 then
-    print("encoder 3")
   end
 end
 
