@@ -4,8 +4,8 @@ Plug in a MIDI controller or a Monome grid and off you go. All 32 algorithms fro
 
 ## Future plans
 
-* Phase Modulation matrix modification using grid and arc controllers
 * Envelope editing via UI
+* Add LFOs
 
 ## TODO
 
