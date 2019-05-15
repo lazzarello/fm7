@@ -89,7 +89,6 @@ local function assign_next_arc_enc()
   enc = 0
   for i=1,4 do
     if arc_mapping[i][2] == 0 then
-      print("assigning mapping for encoder",i)
       arc_mapping[i][2] = i
       enc = i
       break
@@ -103,7 +102,6 @@ local function remove_arc_enc(x,y)
   for i=1,4 do
     if vec == arc_mapping[i][1] then
       a:segment(arc_mapping[i][2],0,tau,0)
-      print("removing mapping for encoder",i)
       arc_mapping[i] = {0,0,"none"}
     end
   end
@@ -116,7 +114,6 @@ function grid_state(x,y,z)
   if z == 1 then
     toggle = not toggle
     set_toggles_value(x,y,toggle)
-    if keys_pressed <= 4 then
       if toggle then
         local arc_enc = assign_next_arc_enc()
         arc_mapping[arc_enc] = {grid_vector(x,y),arc_enc,"hz"..op_out.."_to_hz"..op_in}
@@ -124,30 +121,42 @@ function grid_state(x,y,z)
       else
         remove_arc_enc(x,y)
       end
-    end
+    local s = bool_to_int(toggle)
+    g:led(x,y,3+s*9)
   end
-  local s = bool_to_int(toggle)
-  g:led(x,y,3+s*9)
 end
 
 function g.key(x,y,z)
   if keys_pressed <= 4 then
     if z == 1 and get_toggles_value(x,y) then
       keys_pressed = keys_pressed -1
-    elseif z == 1 then
+      grid_state(x,y,z)
+    elseif z == 1 and keys_pressed ~= 4 then
       keys_pressed = keys_pressed + 1
+      grid_state(x,y,z)
+    end
+    g:refresh()
+    a:refresh()
+  end
+end
+
+local function encoder_is_assigned(n)
+  result = false
+  for i=1,4 do
+    if arc_mapping[i][2] == n then
+      result = true
     end
   end
-  grid_state(x,y,z)
-  g:refresh()
-  a:refresh()
+  return result
 end
 
 local function light_arc(n,d)
-  params:delta(arc_mapping[n][3], d/10)
-  local val = params:get(arc_mapping[n][3])
-  a:segment(n,0,val,12)
-  a:refresh()
+  if encoder_is_assigned(n) then
+    params:delta(arc_mapping[n][3], d/10)
+    local val = params:get(arc_mapping[n][3])
+    a:segment(n,0,val,12)
+    a:refresh()
+  end
 end
 
 function a.delta(n,d)
