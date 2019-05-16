@@ -14,15 +14,13 @@ local UI = require 'ui'
 local MusicUtil = require "musicutil"
 local g = grid.connect()
 local a = arc.connect()
-local keys_pressed = 0
-
 local mode_transpose = 0
 local root = { x=5, y=5 }
 local trans = { x=5, y=5 }
 local lit = {}
 local encoder_mode = 1
 -- top right button to start drawing our grid
-local start_pos = {6,2}
+local start_pos = {1,2}
 local size = {6,6}
   
 local screen_framerate = 15
@@ -35,6 +33,8 @@ local toggles = {}
 
 engine.name = 'FM7'
 tau = math.pi * 2
+arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
+keys_pressed = 0
 
 -- pythagorean minor/major, kinda
 local ratios = { 1, 9/8, 6/5, 5/4, 4/3, 3/2, 27/16, 16/9 }
@@ -65,7 +65,21 @@ local function draw_phase_matrix()
   end  
 end
 
-arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
+local function draw_output_vector()
+  local x = start_pos[1] + size[1] + 1
+  local y = start_pos[2]
+  for i = y,size[2]+1 do
+    g:led(x,i,10)
+  end
+end
+
+local function draw_frequency_vector()
+  local x = start_pos[1] + size[1] + 3
+  local y = start_pos[2]
+  for i = y,size[2]+1 do
+    g:led(x,i,3)
+  end
+end
 
 local function grid_vector(x,y)
   return (x-start_pos[1]+1) + ((y-start_pos[2]) * size[1])
@@ -107,7 +121,7 @@ local function remove_arc_enc(x,y)
   end
 end
 
-function grid_state(x,y,z)
+local function grid_phase_state(x,y,z)
   local op_out = x-start_pos[1]+1
   local op_in = y-start_pos[2]+1
   local toggle = get_toggles_value(x,y)
@@ -126,18 +140,42 @@ function grid_state(x,y,z)
   end
 end
 
-function g.key(x,y,z)
-  if keys_pressed <= 4 then
-    if z == 1 and get_toggles_value(x,y) then
-      keys_pressed = keys_pressed -1
-      grid_state(x,y,z)
-    elseif z == 1 and keys_pressed ~= 4 then
-      keys_pressed = keys_pressed + 1
-      grid_state(x,y,z)
-    end
-    g:refresh()
-    a:refresh()
+local function output_vector_state(x,y,z)
+  idx = y - 1
+  if carriers[idx] ~= 1 then
+    carriers[idx] = 1
+  else
+    carriers[idx] = 0
   end
+  params:set("carrier"..idx, carriers[idx])
+  g:led(x,y,3+carriers[idx]*9)
+end
+
+local function frequency_vector_state(x,y,z)
+  g:led(x,y,3+z*12)
+end
+
+function g.key(x,y,z)
+  -- phase mod matrix updates
+  if x < (start_pos[1] + size[1]) and y >= start_pos[2] and y < (start_pos[2] + size[2]) then
+    if keys_pressed <= 4 then
+      if z == 1 and get_toggles_value(x,y) then
+        keys_pressed = keys_pressed -1
+        grid_phase_state(x,y,z)
+      elseif z == 1 and keys_pressed ~= 4 then
+        keys_pressed = keys_pressed + 1
+        grid_phase_state(x,y,z)
+      end
+    end
+  elseif x == (start_pos[1] + size[1] + 1) and y >= start_pos[2] and y < (start_pos[2] + size[2]) then
+    if z == 1 then
+      output_vector_state(x,y,z)
+    end
+  elseif x == (start_pos[1] + size[1] + 3) and y >= start_pos[2] and y < (start_pos[2] + size[2]) then
+    frequency_vector_state(x,y,z)
+  end
+  g:refresh()
+  a:refresh()
 end
 
 local function encoder_is_assigned(n)
@@ -205,7 +243,7 @@ function init()
   for m = 1,6 do
     selected[m] = {}
     mods[m] = {}
-    carriers[m] = 0
+    carriers[m] = 1
     for n = 1,6 do
       selected[m][n] = 0
       mods[m][n] = 0
@@ -221,8 +259,7 @@ function init()
   pages = UI.Pages.new(1, 33)
 end
 
---[[
-function g.key(x, y, z)
+function earthsea_mode(x, y, z)
   if x == 1 and (y > 2 and y < 8) then
     if z == 1 and getEncoderMode() == y - 1 then
       setEncoderMode(1)
@@ -280,7 +317,6 @@ function g.key(x, y, z)
   end
   gridredraw()
 end
---]]
 
 function grid_note(e)
   local note = ((7-e.y)*5) + e.x
@@ -344,6 +380,8 @@ function gridredraw()
   end
   ]]--
   draw_phase_matrix()
+  draw_output_vector()
+  draw_frequency_vector()
   g:refresh()
 end
 
@@ -359,8 +397,7 @@ function enc(n,delta)
   end
 end
 
-function key(n,z)
-  if n == 2 and z== 1 then
+local function set_random_mods(n)
     -- clear selected
     for x = 1,6 do
       for y = 1,6 do
@@ -373,7 +410,7 @@ function key(n,z)
     end
     
     -- choose new random mods
-    for i = 1,number do
+    for i = 1,n do
       x = math.random(6)
       y = math.random(6)
       selected[x][y] = 1
@@ -382,14 +419,17 @@ function key(n,z)
       params:set("hz"..x.."_to_hz"..y,mods[x][y])
       params:set("carrier"..x,carriers[x])
     end
+end
+
+function key(n,z)
+  if n == 2 and z== 1 then
+    set_random_mods(number)
+    redraw()
   end
-  redraw()
   if n == 3 then
     local note = ((7-math.random(8))*5) + math.random(16)
     if z == 1 then
       if nvoices < MAX_NUM_VOICES then
-      --engine.start(id, getHz(x, y-1))
-      --print("grid > "..id.." "..note)
         engine.start(0, getHzET(note))
         nvoices = nvoices + 1
       end
@@ -425,41 +465,6 @@ local function draw_matrix_outputs()
   end  
 end
 
-local function draw_algo_rel(num)
-    -- my first try was clever but not really intuitive.
-    -- keeping it for posterity.
-    screen.move(0,10)
-    screen.text("algo "..num)
-    local size = 9
-    local x = 32
-    local y = 5
-    local spacing = 16
-    local text_coords = {2,6}
-    screen.rect(x,y,size,size)
-    screen.move_rel(text_coords[1], text_coords[2])
-    screen.text(6)
-    y = y + spacing
-    screen.rect(x,y,size,size)
-    screen.move_rel(text_coords[1], text_coords[2])
-    screen.text(5)
-    y = y + spacing
-    screen.rect(x,y,size,size)
-    screen.move_rel(text_coords[1], text_coords[2])
-    screen.text(4)
-    y = y + spacing
-    screen.rect(x,y,size,size)
-    screen.move_rel(text_coords[1], text_coords[2])
-    screen.text(3)
-    x = x - spacing
-    screen.rect(x,y,size,size)
-    screen.move_rel(text_coords[1], text_coords[2])
-    screen.text(1)
-    y = y - spacing
-    screen.rect(x,y,size,size)
-    screen.move_rel(text_coords[1], text_coords[2])
-    screen.text(2)
-    screen.stroke()
-end
 local algo_box_coords = 
   {
 --[[
