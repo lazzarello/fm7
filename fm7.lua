@@ -36,6 +36,7 @@ local carriers = {}
 engine.name = 'FM7'
 tau = math.pi * 2
 arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
+enc_mapping = {true,false,false} -- table to hold parameter names for Norns encoders
 keys_pressed = 0
 g = grid.connect()
 a = arc.connect()
@@ -157,6 +158,14 @@ local function output_vector_state(x,y,z)
 end
 
 local function frequency_vector_state(x,y,z)
+  if z == 1 then
+    enc_mapping[2] = "hz"..y - start_pos[2] + 1
+    enc_mapping[3] = "hz"..y - start_pos[2] + 1
+  else
+    enc_mapping[2] = false
+    enc_mapping[3] = false
+  end
+  tab.print(enc_mapping)
   g:led(x,y,3+z*12)
 end
 
@@ -201,8 +210,6 @@ local function light_arc(n,d)
     local screen_val = math.ceil(val)
     local x = (arc_mapping[n][1] % size[1]) == 0 and size[1] or arc_mapping[n][1] % size[1]
     local y = math.ceil(arc_mapping[n][1] / size[2])
-    print("value for encoder ",screen_val)
-    print("values for x,y",x,y)
     mods[x][y] = screen_val
     redraw()
     a:refresh()
@@ -395,6 +402,32 @@ function gridredraw()
   g:refresh()
 end
 
+local function draw_matrix_outputs()
+  for m = 1,6 do
+    for n = 1,6 do
+      screen.rect(m*9, n*9, 9, 9)
+
+      l = 2
+      if selected[m][n] == 1 then
+        l = l + 3 + light
+      end
+      screen.level(l)
+      screen.move_rel(2, 6)
+      screen.text(mods[m][n])
+      screen.stroke()
+    end
+  end
+  for m = 1,6 do
+    screen.rect(75,m*9,9,9)
+    screen.move_rel(2, 6)
+    screen.text(carriers[m])
+    screen.rect(95,m*9,24,9)
+    screen.move_rel(2, 6)
+    screen.text(params:get("hz"..m))
+    screen.stroke()    
+  end  
+end
+
 function enc(n,delta)
   if n == 1 then
     pages:set_index_delta(delta, true)
@@ -404,6 +437,11 @@ function enc(n,delta)
     else
       params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
     end
+  elseif n == 2 then
+    params:delta(enc_mapping[n],delta/10)
+    draw_matrix_outputs()
+  elseif n == 3 then
+    draw_matrix_outputs()
   end
 end
 
@@ -447,31 +485,6 @@ function key(n,z)
       nvoices = nvoices - 1
     end
   end
-end
-
-local function draw_matrix_outputs()
-  for m = 1,6 do
-    for n = 1,6 do
-      screen.rect(m*9, n*9, 9, 9)
-
-      l = 2
-      if selected[m][n] == 1 then
-        l = l + 3 + light
-      end
-      screen.level(l)
-      screen.move_rel(2, 6)
-      screen.text(mods[m][n])
-      screen.stroke()
-    end
-  end
-  for m = 1,6 do
-    screen.rect(80,m*9,9,9)
-    screen.move_rel(12, 6)
-    screen.text("out "..m)
-    screen.move_rel(-32,0)
-    screen.text(carriers[m])
-    screen.stroke()    
-  end  
 end
 
 local algo_box_coords = 
