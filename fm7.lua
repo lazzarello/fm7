@@ -12,8 +12,6 @@ local tab = require 'tabutil'
 local pattern_time = require 'pattern_time'
 local UI = require 'ui'
 local MusicUtil = require "musicutil"
-local g = grid.connect()
-local a = arc.connect()
 local mode_transpose = 0
 local root = { x=5, y=5 }
 local trans = { x=5, y=5 }
@@ -30,16 +28,23 @@ local MAX_NUM_VOICES = 16
 -- current count of active voices
 local nvoices = 0
 local toggles = {}
-
+local ph_position,hz_position,amp_position = 0,0,0
+local selected = {}
+local mods = {}
+local carriers = {}
+  
 engine.name = 'FM7'
 tau = math.pi * 2
 arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
 keys_pressed = 0
+g = grid.connect()
+a = arc.connect()
 
 -- pythagorean minor/major, kinda
 local ratios = { 1, 9/8, 6/5, 5/4, 4/3, 3/2, 27/16, 16/9 }
 local base = 27.5 -- low A
 
+-- ### SO MANY FUNCTIONS ### --
 local function getHz(deg,oct)
   return base * ratios[deg] * (2^oct)
 end
@@ -193,6 +198,13 @@ local function light_arc(n,d)
     params:delta(arc_mapping[n][3], d/10)
     local val = params:get(arc_mapping[n][3])
     a:segment(n,0,val,12)
+    local screen_val = math.ceil(val)
+    local x = (arc_mapping[n][1] % size[1]) == 0 and size[1] or arc_mapping[n][1] % size[1]
+    local y = math.ceil(arc_mapping[n][1] / size[2])
+    print("value for encoder ",screen_val)
+    print("values for x,y",x,y)
+    mods[x][y] = screen_val
+    redraw()
     a:refresh()
   end
 end
@@ -221,7 +233,12 @@ function init()
 
   FM7.add_params()
 
-  if g then gridredraw() end
+  if g then 
+    draw_phase_matrix()
+    draw_output_vector()
+    draw_frequency_vector()
+    gridredraw()
+  end
 
   screen_refresh_metro = metro.init()
   screen_refresh_metro.event = function(stage)
@@ -236,10 +253,6 @@ function init()
   end
   startup_ani_metro:start( 0.1, 3 )
   
-  ph_position,hz_position,amp_position = 0,0,0
-  selected = {}
-  mods = {}
-  carriers = {}
   for m = 1,6 do
     selected[m] = {}
     mods[m] = {}
@@ -379,9 +392,6 @@ function gridredraw()
     g:led(e.x, e.y,15)
   end
   ]]--
-  draw_phase_matrix()
-  draw_output_vector()
-  draw_frequency_vector()
   g:refresh()
 end
 
@@ -397,16 +407,15 @@ function enc(n,delta)
   end
 end
 
-local function set_random_mods(n)
+local function set_random_phase_mods(n)
     -- clear selected
     for x = 1,6 do
       for y = 1,6 do
         selected[x][y] = 0
         mods[x][y] = 0
-        carriers[x] = 0
-        params:set("hz"..x.."_to_hz"..y,mods[x][y])
+        --params:set("hz"..x.."_to_hz"..y,mods[x][y])
+        g:led(x,y+1,3)
       end
-      params:set("carrier"..x,carriers[x])
     end
     
     -- choose new random mods
@@ -415,16 +424,16 @@ local function set_random_mods(n)
       y = math.random(6)
       selected[x][y] = 1
       mods[x][y] = 1 
-      carriers[x] = 1
-      params:set("hz"..x.."_to_hz"..y,mods[x][y])
-      params:set("carrier"..x,carriers[x])
+      -- params:set("hz"..x.."_to_hz"..y,mods[x][y])
+      grid_phase_state(x,y+1,1)
     end
 end
 
 function key(n,z)
   if n == 2 and z== 1 then
-    set_random_mods(number)
+    set_random_phase_mods(number)
     redraw()
+    gridredraw()
   end
   if n == 3 then
     local note = ((7-math.random(8))*5) + math.random(16)
