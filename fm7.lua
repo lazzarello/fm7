@@ -55,14 +55,6 @@ local function getHzET(note)
   return hz
 end
 
-local function getEncoderMode()
-  return encoder_mode
-end
-
-local function setEncoderMode(mode)
-  encoder_mode = mode
-end
-
 local function draw_phase_matrix()
   for y = start_pos[2], (start_pos[2] + size[2] - 1) do
     for x = start_pos[1],(start_pos[1] + size[1] - 1) do
@@ -190,6 +182,7 @@ function g.key(x,y,z)
   end
   g:refresh()
   a:refresh()
+  pattern_control(x,y,z)
 end
 
 local function encoder_is_assigned(n)
@@ -279,18 +272,10 @@ function init()
   pages = UI.Pages.new(1, 33)
 end
 
-function earthsea_mode(x, y, z)
-  if x == 1 and (y > 2 and y < 8) then
-    if z == 1 and getEncoderMode() == y - 1 then
-      setEncoderMode(1)
-    elseif z == 1 then
-      setEncoderMode(y - 1) 
-    end
-  end
-
-  if x == 1 then
+function pattern_control(x, y, z)
+  if x == 16 then
     if z == 1 then
-      if y == 1 and pat.rec == 0 then
+      if y == 2 and pat.rec == 0 then
         mode_transpose = 0
         trans.x = 5
         trans.y = 5
@@ -298,7 +283,7 @@ function earthsea_mode(x, y, z)
         engine.stopAll()
         pat:clear()
         pat:rec_start()
-      elseif y == 1 and pat.rec == 1 then
+      elseif y == 2 and pat.rec == 1 then
         pat:rec_stop()
         if pat.count > 0 then
           root.x = pat.event[1].x
@@ -307,21 +292,22 @@ function earthsea_mode(x, y, z)
           trans.y = root.y
           pat:start()
         end
-      elseif y == 2 and pat.play == 0 and pat.count > 0 then
+      elseif y == 3 and pat.play == 0 and pat.count > 0 then
         if pat.rec == 1 then
           pat:rec_stop()
         end
         pat:start()
-      elseif y == 2 and pat.play == 1 then
+      elseif y == 3 and pat.play == 1 then
         pat:stop()
         engine.stopAll()
         nvoices = 0
         lit = {}
-      elseif y == 8 then
+      elseif y == 7 then
         mode_transpose = 1 - mode_transpose
       end
     end
-  else
+  -- catch key events outside the control row
+  elseif y < 2 or y > 7 then
     if mode_transpose == 0 then
       local e = {}
       e.id = x*8 + y
@@ -364,8 +350,6 @@ function grid_note_trans(e)
   local note = ((7-e.y+(root.y-trans.y))*5) + e.x + (trans.x-root.x)
   if e.state > 0 then
     if nvoices < MAX_NUM_VOICES then
-      --engine.start(id, getHz(x, y-1))
-      --print("grid > "..id.." "..note)
       engine.start(e.id, getHzET(note))
       lit[e.id] = {}
       lit[e.id].x = e.x + trans.x - root.x
@@ -380,25 +364,21 @@ function grid_note_trans(e)
   gridredraw()
 end
 
-local function toggleModLED(mode)
-  if mode ~= 1 then
-    g:led(1,mode + 1,12)
-  end
-end
-
 function gridredraw()
-  --[[
-  g:all(0)
-  g:led(1,1,2 + pat.rec * 10)
-  g:led(1,2,2 + pat.play * 10)
-  g:led(1,8,2 + mode_transpose * 10)
-  toggleModLED(getEncoderMode())
+  -- clear the LEDs on the top and bottom rows
+  for i=1,16 do
+    g:led(i,1,0)
+    g:led(i,8,0)
+  end
+  g:led(16,2,2 + pat.rec * 10)
+  g:led(16,3,2 + pat.play * 10)
+  g:led(16,7,2 + mode_transpose * 10)
 
   if mode_transpose == 1 then g:led(trans.x, trans.y, 4) end
+  -- look into our table of lights and light up the notes
   for i,e in pairs(lit) do
     g:led(e.x, e.y,15)
   end
-  ]]--
   g:refresh()
 end
 
