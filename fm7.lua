@@ -6,6 +6,12 @@
 -- enc 1: change presets
 -- key 2: random modulation matrix
 -- key 3: play a random note
+engine.name = 'FM7'
+tau = math.pi * 2
+arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
+enc_mapping = {true,false,false} -- table to hold parameter names for Norns encoders
+g = grid.connect()
+a = arc.connect()
 
 local FM7 = require 'fm7/lib/fm7'
 local tab = require 'tabutil'
@@ -16,14 +22,9 @@ local mode_transpose = 0
 local root = { x=5, y=5 }
 local trans = { x=5, y=5 }
 local lit = {}
-local encoder_mode = 1
 -- top right button to start drawing our grid
 local start_pos = {1,2}
 local size = {6,6}
-  
-local screen_framerate = 15
-local screen_refresh_metro
-
 local MAX_NUM_VOICES = 16
 -- current count of active voices
 local nvoices = 0
@@ -32,14 +33,9 @@ local ph_position,hz_position,amp_position = 0,0,0
 local selected = {}
 local mods = {}
 local carriers = {}
-  
-engine.name = 'FM7'
-tau = math.pi * 2
-arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
-enc_mapping = {true,false,false} -- table to hold parameter names for Norns encoders
-keys_pressed = 0
-g = grid.connect()
-a = arc.connect()
+local phase_keys_pressed = 0
+local phase_max_keys = 1
+if a then phase_max_keys = 4 end
 
 -- pythagorean minor/major, kinda
 local ratios = { 1, 9/8, 6/5, 5/4, 4/3, 3/2, 27/16, 16/9 }
@@ -164,12 +160,12 @@ end
 function g.key(x,y,z)
   -- phase mod matrix updates
   if x < (start_pos[1] + size[1]) and y >= start_pos[2] and y < (start_pos[2] + size[2]) then
-    if keys_pressed <= 4 then
+    if phase_keys_pressed <= phase_max_keys then
       if z == 1 and get_toggles_value(x,y) then
-        keys_pressed = keys_pressed -1
+        phase_keys_pressed = phase_keys_pressed -1
         grid_phase_state(x,y,z)
-      elseif z == 1 and keys_pressed ~= 4 then
-        keys_pressed = keys_pressed + 1
+      elseif z == 1 and phase_keys_pressed ~= phase_max_keys then
+        phase_keys_pressed = phase_keys_pressed + 1
         grid_phase_state(x,y,z)
       end
     end
@@ -240,19 +236,6 @@ function init()
     gridredraw()
   end
 
-  screen_refresh_metro = metro.init()
-  screen_refresh_metro.event = function(stage)
-    redraw()
-  end
-  screen_refresh_metro:start(1 / screen_framerate)
-
-  local startup_ani_count = 1
-  local startup_ani_metro = metro.init()
-  startup_ani_metro.event = function(stage)
-    startup_ani_count = startup_ani_count + 1
-  end
-  startup_ani_metro:start( 0.1, 3 )
-  
   for m = 1,6 do
     selected[m] = {}
     mods[m] = {}
