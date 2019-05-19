@@ -35,7 +35,8 @@ local mods = {}
 local carriers = {}
 local phase_keys_pressed = 0
 local phase_max_keys = 1
-if a then phase_max_keys = 4 end
+local screen_framerate = 15
+local screen_refresh_metro
 
 -- pythagorean minor/major, kinda
 local ratios = { 1, 9/8, 6/5, 5/4, 4/3, 3/2, 27/16, 16/9 }
@@ -235,6 +236,14 @@ function init()
     draw_frequency_vector()
     gridredraw()
   end
+  
+  if a then phase_max_keys = 4 end
+
+  screen_refresh_metro = metro.init()
+  screen_refresh_metro.event = function(stage)
+    redraw()
+  end
+  screen_refresh_metro:start(1 / screen_framerate)
 
   for m = 1,6 do
     selected[m] = {}
@@ -256,7 +265,7 @@ function init()
 end
 
 function pattern_control(x, y, z)
-  if x == 16 then
+  if x == 16 and (y > 1 and y < 8) then
     if z == 1 then
       if y == 2 and pat.rec == 0 then
         mode_transpose = 0
