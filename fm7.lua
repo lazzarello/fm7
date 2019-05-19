@@ -331,8 +331,6 @@ function grid_note(e)
   local note = ((7-e.y)*5) + e.x
   if e.state > 0 then
     if nvoices < MAX_NUM_VOICES then
-      --engine.start(id, getHz(x, y-1))
-      --print("grid > "..id.." "..note)
       engine.start(e.id, getHzET(note))
       lit[e.id] = {}
       lit[e.id].x = e.x
@@ -414,7 +412,6 @@ end
 function enc(n,delta)
   if n == 1 then
     pages:set_index_delta(delta, true)
-    --print("set algo ".. (pages.index - 1))
     if (pages.index - 1) < 10 then
       params:read("/home/we/dust/code/fm7/data/fm7-0".. (pages.index - 1) .. ".pset")
     else
@@ -434,7 +431,7 @@ local function set_random_phase_mods(n)
       for y = 1,6 do
         selected[x][y] = 0
         mods[x][y] = 0
-        --params:set("hz"..x.."_to_hz"..y,mods[x][y])
+        params:set("hz"..x.."_to_hz"..y,mods[x][y])
         g:led(x,y+1,3)
       end
     end
@@ -445,7 +442,7 @@ local function set_random_phase_mods(n)
       y = math.random(6)
       selected[x][y] = 1
       mods[x][y] = 1 
-      -- params:set("hz"..x.."_to_hz"..y,mods[x][y])
+      params:set("hz"..x.."_to_hz"..y,mods[x][y])
       grid_phase_state(x,y+1,1)
     end
 end
