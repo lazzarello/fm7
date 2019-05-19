@@ -124,11 +124,16 @@ local function grid_phase_state(x,y,z)
     toggle = not toggle
     set_toggles_value(x,y,toggle)
       if toggle then
-        local arc_enc = assign_next_arc_enc()
-        arc_mapping[arc_enc] = {grid_vector(x,y),arc_enc,"hz"..op_out.."_to_hz"..op_in}
-        a:segment(arc_mapping[arc_enc][2],0,params:get(arc_mapping[arc_enc][3]),12)
+        if phase_max_keys > 1 then
+          local arc_enc = assign_next_arc_enc()
+          arc_mapping[arc_enc] = {grid_vector(x,y),arc_enc,"hz"..op_out.."_to_hz"..op_in}
+          a:segment(arc_mapping[arc_enc][2],0,params:get(arc_mapping[arc_enc][3]),12)
+        else
+          enc_mapping[3] = "hz"..op_out.."_to_hz"..op_in
+        end
       else
         remove_arc_enc(x,y)
+        enc_mapping[3] = false
       end
     local s = bool_to_int(toggle)
     g:led(x,y,3+s*9)
@@ -149,12 +154,10 @@ end
 local function frequency_vector_state(x,y,z)
   if z == 1 then
     enc_mapping[2] = "hz"..y - start_pos[2] + 1
-    enc_mapping[3] = "hz"..y - start_pos[2] + 1
   else
     enc_mapping[2] = false
-    enc_mapping[3] = false
   end
-  tab.print(enc_mapping)
+  --tab.print(enc_mapping)
   g:led(x,y,3+z*12)
 end
 
@@ -182,7 +185,7 @@ function g.key(x,y,z)
   pattern_control(x,y,z)
 end
 
-local function encoder_is_assigned(n)
+local function arc_encoder_is_assigned(n)
   result = false
   for i=1,4 do
     if arc_mapping[i][2] == n then
@@ -192,8 +195,8 @@ local function encoder_is_assigned(n)
   return result
 end
 
-local function light_arc(n,d)
-  if encoder_is_assigned(n) then
+local function update_phase_matrix(n,d)
+  if arc_encoder_is_assigned(n) then
     params:delta(arc_mapping[n][3], d/10)
     local val = params:get(arc_mapping[n][3])
     a:segment(n,0,val,12)
@@ -203,18 +206,26 @@ local function light_arc(n,d)
     mods[x][y] = screen_val
     redraw()
     a:refresh()
+  elseif enc_mapping[3] then
+    params:delta(enc_mapping[3],d/2)
+    local screen_val = math.ceil(params:get(enc_mapping[3]))
+    idx = tab.key(toggles,true)
+    local x = (idx % size[1]) == 0 and size[1] or idx % size[1]
+    local y = math.ceil(idx / size[2])
+    mods[x][y] = screen_val
+    redraw()    
   end
 end
 
 function a.delta(n,d)
   if n == 1 then
-    light_arc(n,d)
+    update_phase_matrix(n,d)
   elseif n == 2 then
-    light_arc(n,d)
+    update_phase_matrix(n,d)
   elseif n == 3 then
-    light_arc(n,d)
+    update_phase_matrix(n,d)
   elseif n == 4 then
-    light_arc(n,d)
+    update_phase_matrix(n,d)
   end
 end
 
@@ -237,7 +248,7 @@ function init()
     gridredraw()
   end
   
-  if a then phase_max_keys = 4 end
+  if a.device then phase_max_keys = 4 end
 
   screen_refresh_metro = metro.init()
   screen_refresh_metro.event = function(stage)
@@ -410,10 +421,10 @@ function enc(n,delta)
       params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
     end
   elseif n == 2 then
-    params:delta(enc_mapping[n],delta/10)
+    params:delta(enc_mapping[2],delta/10)
     draw_matrix_outputs()
   elseif n == 3 then
-    draw_matrix_outputs()
+    update_phase_matrix(n,delta)
   end
 end
 
