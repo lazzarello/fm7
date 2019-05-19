@@ -272,7 +272,7 @@ function init()
     table.insert(toggles,false)
   end
 
-  pages = UI.Pages.new(1, 33)
+  pages = UI.Pages.new(1, 1)
 end
 
 function pattern_control(x, y, z)
@@ -411,12 +411,13 @@ end
 
 function enc(n,delta)
   if n == 1 then
-    pages:set_index_delta(delta, true)
-    if (pages.index - 1) < 10 then
-      params:read("/home/we/dust/code/fm7/data/fm7-0".. (pages.index - 1) .. ".pset")
-    else
-      params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
-    end
+    -- TODO: use enc 1 for pages like envlopes and LFO controls
+    --pages:set_index_delta(delta, true)
+    --if (pages.index - 1) < 10 then
+    --  params:read("/home/we/dust/code/fm7/data/fm7-0".. (pages.index - 1) .. ".pset")
+    --else
+    --  params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
+    --end
   elseif n == 2 then
     params:delta(enc_mapping[2],delta/10)
     draw_matrix_outputs()
@@ -542,13 +543,16 @@ end
 function redraw()
   screen.clear()
   pages:redraw()
-  
+  draw_matrix_outputs()
+    
+  --[[
   if pages.index == 1 then
     draw_matrix_outputs()
   else
     draw_algo(pages.index - 1)
   end
-
+  --]]
+  
   screen.update()
 end
 
