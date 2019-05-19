@@ -265,7 +265,7 @@ function init()
 end
 
 function pattern_control(x, y, z)
-  if x == 16 and (y > 1 and y < 8) then
+  if x == 16 and y > 1 and y < 8 then
     if z == 1 then
       if y == 2 and pat.rec == 0 then
         mode_transpose = 0
