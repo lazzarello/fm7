@@ -1,11 +1,27 @@
--- FM7
---
--- FM polysynth
--- controlled by grid or MIDI and arc
---
--- enc 1: change presets
--- key 2: random modulation matrix
+-- FM7 Polyphonic Synthesizer
+-- With 6 Operator Frequency 
+-- Modulation
+-- ///////////////////////////
+-- key 2: random phase mods
 -- key 3: play a random note
+-- ///////////////////////////
+-- grid pattern player:
+-- 1-16 1 high voice
+-- 1-16 8 low voice
+-- 16 2 pattern record toggle
+-- 16 3 pattern play toggle
+-- 16 7 pattern transpose mode
+-- ///////////////////////////
+-- 1-6 2-7 phase mod matrix
+-- 8 2-7 operator audio output
+-- 10 2-7 frequency multiplier
+-- (enables ENC2 control)
+-- ///////////////////////////
+-- Arc encoders are assigned 
+-- when phase mod toggled.
+-- Without an arc, ENC3 is 
+-- phase mod controller
+
 engine.name = 'FM7'
 tau = math.pi * 2
 arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
