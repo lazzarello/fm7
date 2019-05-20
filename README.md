@@ -1,6 +1,8 @@
 # FM7 - A Polyphonic Synthesizer for Norns With 6 Operator Frequency Modulation
 
-Plug in a MIDI controller or a Monome Arid and off you go. Check parameters menu for all the things you can change. Modular possibilities expanded with Monome Arc. The phrase frequency modulation and phase modulation are equivilent. The docs use the term phase modulation because that's what the engine uses.
+Plug in a MIDI controller or a Monome Arid and off you go. Check parameters menu for all the things you can change. Modular possibilities expanded with Monome Arc. 
+
+*The phrase frequency modulation and phase modulation are equivilent. The docs use the term phase modulation because that's what the engine uses.*
 
 ![docs](docs/grid-UI.png)
 
