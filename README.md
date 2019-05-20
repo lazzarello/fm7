@@ -2,8 +2,6 @@
 
 Plug in a MIDI controller or a Monome Arid and off you go. Check parameters menu for all the things you can change. Modular possibilities expanded with Monome Arc. The phrase frequency modulation and phase modulation are equivilent. The docs use the term phase modulation because that's what the engine uses.
 
-[Video example](https://youtu.be/HI9B-vuWF4A)
-
 ![docs](docs/grid-UI.png)
 
 ### Requirements
