@@ -77,6 +77,7 @@ local screen_refresh_metro
 -- pythagorean minor/major, kinda
 local ratios = { 1, 9/8, 6/5, 5/4, 4/3, 3/2, 27/16, 16/9 }
 local base = 27.5 -- low A
+local amp_env_view
 
 -- helper functions
 local function getHz(deg,oct)
@@ -343,7 +344,7 @@ function init()
   end
 
   -- make a new pages collection, with a single page, starting on the first page
-  pages = UI.Pages.new(1, 1)
+  pages = UI.Pages.new(1, 2)
 end
 
 -- copy paste from @tehn earthsea library
@@ -485,13 +486,9 @@ end
 -- callbacks for norns encoders
 function enc(n,delta)
   if n == 1 then
-    -- TODO: use enc 1 for pages like envlopes and LFO controls
-    --pages:set_index_delta(delta, true)
-    --if (pages.index - 1) < 10 then
-    --  params:read("/home/we/dust/code/fm7/data/fm7-0".. (pages.index - 1) .. ".pset")
-    --else
-    --  params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
-    --end
+    pages:set_index_delta(delta, false)
+    -- all screen drawing functions are in the redraw() function
+    redraw()
   elseif n == 2 then
     params:delta(enc_mapping[2],delta/10)
     draw_matrix_outputs()
@@ -549,16 +546,13 @@ end
 function redraw()
   screen.clear()
   pages:redraw()
-  draw_matrix_outputs()
     
-  --[[
   if pages.index == 1 then
     draw_matrix_outputs()
-  else
-    -- this has been moved to lib/
-    draw_algo(pages.index - 1)
+  elseif pages.index == 2 then
+    print("im an envelope")
+    -- draw env editing screen
   end
-  --]]
   
   screen.update()
 end

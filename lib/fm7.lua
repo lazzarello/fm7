@@ -6,9 +6,11 @@
 -- @author Lee Azzarello
 
 local ControlSpec = require "controlspec"
+local UI = require "ui"
+local EnvGraph = require "envgraph"
 
 local FM7 = {}
-
+F
 local specs = {}
 local options = {}
 
@@ -196,6 +198,32 @@ function FM7.add_params()
   params:add{type = "control", id = "opAmpS6",name = "Osc6 Amp Env Sustain", controlspec = specs.OPAMP_S6, action = engine.opAmpS6}
   params:add{type = "control", id = "opAmpR6",name = "Osc6 Amp Env Release", controlspec = specs.OPAMP_R6, action = engine.opAmpR6}
   params:bang()
-
 end
+
+-------- Env --------
+-- Just here as a superclass of AmpEnv and ModEnv
+
+FM7.UI.Env = {}
+FM7.UI.Env.__index = FM7.UI.Env
+
+function FM7.UI.Env.new(env_name, op_id, tab_id)
+  -- create an envelope graph
+  local graph = EnvGraph.new_adsr(0, 20, nil, nil,
+    params:get(env_name .. "A" .. op_id),
+    params:get(env_name .. "D" .. op_id),
+    params:get(env_name .. "S" .. op_id),
+    params:get(env_name .. "R" .. op_id), 1, -4)
+  graph:set_position_and_size(57, 34, 60, 25)
+  local env = {
+    env_name = env_name,
+    title = string.upper(string.sub(env_name, 1, 1)) .. string.sub(env_name, 2),
+    op_id = op_id or 1,
+    tab_id = tab_id or 1,
+    graph = graph
+  }
+  setmetatable(FM7.UI.Env, {__index = FM7.UI})
+  setmetatable(env, FM7.UI.Env)
+  return env
+end
+
 return FM7
