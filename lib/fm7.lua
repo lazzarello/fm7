@@ -10,7 +10,6 @@ local UI = require "ui"
 local EnvGraph = require "envgraph"
 
 local FM7 = {}
-F
 local specs = {}
 local options = {}
 
@@ -199,6 +198,11 @@ function FM7.add_params()
   params:add{type = "control", id = "opAmpR6",name = "Osc6 Amp Env Release", controlspec = specs.OPAMP_R6, action = engine.opAmpR6}
   params:bang()
 end
+
+-- FM7 UI views
+
+FM7.UI = {}
+FM7.UI.__index = FM7.UI
 
 -------- Env --------
 -- Just here as a superclass of AmpEnv and ModEnv
