@@ -48,3 +48,13 @@ In the frequency ratios of each operator significantly effect the harmonics in t
 6. round value to 2 decimal places
 7. Draw new value on OLED
 
+## Object layout for OO refactor
+
+GridUI
+  ToggleGrid
+  MomentaryGrid
+  GridScreen
+  
+ArcParam
+
+
