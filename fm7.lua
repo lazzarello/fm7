@@ -32,7 +32,7 @@ g = grid.connect()
 a = arc.connect()
 
 -- require params library, why is this local to ~/dust/code and not . ?
-FM7 = require 'fm7/lib/fm7'
+local FM7 = include('fm7/lib/fm7')
 -- helpers to work with tables
 local tab = require 'tabutil'
 -- helpers to record and playback patterns on a grid
