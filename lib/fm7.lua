@@ -230,4 +230,44 @@ function FM7.UI.Env.new(env_name, op_id, tab_id)
   return env
 end
 
+function FM7.UI.Env:redraw()
+  screen.move(4, 27)
+  screen.text("A " .. params:string(self.env_name .. "A" .. self.op_id))
+  screen.move(4, 38)
+  screen.text("D " .. params:string(self.env_name .. "D" .. self.op_id))
+  screen.move(4, 49)
+  screen.text("S " .. params:string(self.env_name .. "S" .. self.op_id))
+  screen.move(4, 60)
+  screen.text("R " .. params:string(self.env_name .. "R" .. self.op_id))
+  screen.level(3)
+  screen.move(56, 27)
+  screen.text(self.title)
+  screen.fill()
+  self.graph:redraw()
+end
+
+-------- Amp Env --------
+FM7.UI.AmpEnv = {}
+FM7.UI.AmpEnv.__index = FM7.UI.AmpEnv
+
+function FM7.UI.AmpEnv.new(op_id, tab_id)
+  print('get in to the new')
+  local env = FM7.UI.Env.new("opAmp", op_id, tab_id)
+  setmetatable(FM7.UI.AmpEnv, {__index = FM7.UI.Env})
+  setmetatable(env,FM7.UI.AmpEnv)
+  return env
+end
+
+function FM7.UI.AmpEnv:enc(n, delta)
+  if n == 1 then
+    params:delta("opAmpA".. self.op_id, delta)
+  elseif n == 2 then
+    params:delta("opAmpD".. self.op_id, delta)
+  elseif n == 3 then
+    params:delta("opAmpS".. self.op_id, delta)
+  elseif n == 4 then
+    params:delta("opAmpR".. self.op_id, delta)
+  end
+end
+  
 return FM7

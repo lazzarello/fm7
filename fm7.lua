@@ -32,7 +32,7 @@ g = grid.connect()
 a = arc.connect()
 
 -- require params library, why is this local to ~/dust/code and not . ?
-local FM7 = require 'fm7/lib/fm7'
+FM7 = require 'fm7/lib/fm7'
 -- helpers to work with tables
 local tab = require 'tabutil'
 -- helpers to record and playback patterns on a grid
@@ -345,6 +345,7 @@ function init()
 
   -- make a new pages collection, with a single page, starting on the first page
   pages = UI.Pages.new(1, 2)
+  amp_env_view = FM7.UI.AmpEnv.new(1)
 end
 
 -- copy paste from @tehn earthsea library
