@@ -15,7 +15,8 @@
 -- 1-6 2-7 phase mod matrix
 -- 8 2-7 operator audio output
 -- 10 2-7 frequency multiplier
--- (enables ENC2 control)
+-- (enables encoder control)
+-- ENC1 coarse, ENC2 fine
 -- ///////////////////////////
 -- Arc encoders are assigned 
 -- when phase mod toggled.
@@ -427,13 +428,8 @@ end
 
 function enc(n,delta)
   if n == 1 then
-    -- TODO: use enc 1 for pages like envlopes and LFO controls
-    --pages:set_index_delta(delta, true)
-    --if (pages.index - 1) < 10 then
-    --  params:read("/home/we/dust/code/fm7/data/fm7-0".. (pages.index - 1) .. ".pset")
-    --else
-    --  params:read("/home/we/dust/code/fm7/data/fm7-".. (pages.index - 1) .. ".pset")
-    --end
+    params:delta(enc_mapping[2],delta/4)
+    draw_matrix_outputs()
   elseif n == 2 then
     params:delta(enc_mapping[2],delta/10)
     draw_matrix_outputs()
