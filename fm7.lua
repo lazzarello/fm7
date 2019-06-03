@@ -25,41 +25,61 @@
 
 engine.name = 'FM7'
 tau = math.pi * 2
+-- table to hold tuples to map phase mod params to grid key
+-- {grid index, encoder index, parameter name}
 arc_mapping = {{0,0,"none"},{0,0,"none"},{0,0,"none"},{0,0,"none"}}
 enc_mapping = {true,false,false} -- table to hold parameter names for Norns encoders
 g = grid.connect()
 a = arc.connect()
 
+-- require params library, why is this local to ~/dust/code and not . ?
 local FM7 = require 'fm7/lib/fm7'
+-- helpers to work with tables
 local tab = require 'tabutil'
+-- helpers to record and playback patterns on a grid
 local pattern_time = require 'pattern_time'
+-- helpers for OLED screen
 local UI = require 'ui'
+-- helpers for MIDI to Hz and scales
 local MusicUtil = require "musicutil"
+-- pattern player has a transpose mode
 local mode_transpose = 0
+-- Tables to define the root note and tranposed note (may not be useful right now)
 local root = { x=5, y=5 }
 local trans = { x=5, y=5 }
+-- table of which LEDs on the grid are lit up in the pattern
 local lit = {}
--- top right button to start drawing our grid
+-- top right button to start drawing our phase mod grid
 local start_pos = {1,2}
+-- size of the phase mode grid
 local size = {6,6}
+-- how many voices allowed for our synth
 local MAX_NUM_VOICES = 16
 -- current count of active voices
 local nvoices = 0
+-- table of which phase mod LEDs are toggled on or off
 local toggles = {}
+-- defaults for phase, frequency and amplitude (i think this is used for the grid OLED page)
 local ph_position,hz_position,amp_position = 0,0,0
+-- tables for which boxes are selected (this can probably be merged with the toggles table)
 local selected = {}
+-- table of modulator values (this also might be obsolete by just grabbing the values of the params)
 local mods = {}
+-- values of which ops output audio
 local carriers = {}
+-- counter of how many keys in the phase mod grid have been toggled on
 local phase_keys_pressed = 0
+-- maximum phase mod toggles allowed
 local phase_max_keys = 1
+-- update the screen at 15 Hz
 local screen_framerate = 15
+-- a variable for our OLED refresh metronome
 local screen_refresh_metro
-
 -- pythagorean minor/major, kinda
 local ratios = { 1, 9/8, 6/5, 5/4, 4/3, 3/2, 27/16, 16/9 }
 local base = 27.5 -- low A
 
--- ### SO MANY FUNCTIONS ### --
+-- helper functions
 local function getHz(deg,oct)
   return base * ratios[deg] * (2^oct)
 end
@@ -69,6 +89,29 @@ local function getHzET(note)
   return hz
 end
 
+local function grid_vector(x,y)
+  -- translate x,y coordinates into a vector
+  return (x-start_pos[1]+1) + ((y-start_pos[2]) * size[1])
+end
+
+local function get_toggles_value(x,y)
+  -- getter for toggles table
+  idx = grid_vector(x,y)
+  return toggles[idx]
+end
+
+local function set_toggles_value(x,y,val)
+  -- setter for toggles table
+  idx = grid_vector(x,y)
+  toggles[idx] = val
+end
+
+local function bool_to_int(value)
+  -- lua doesn't have a type system that understands integers as bolleans
+  return value and 1 or 0
+end
+
+-- FM parameter grid drawing functions
 local function draw_phase_matrix()
   for y = start_pos[2], (start_pos[2] + size[2] - 1) do
     for x = start_pos[1],(start_pos[1] + size[1] - 1) do
@@ -93,24 +136,7 @@ local function draw_frequency_vector()
   end
 end
 
-local function grid_vector(x,y)
-  return (x-start_pos[1]+1) + ((y-start_pos[2]) * size[1])
-end
-
-local function get_toggles_value(x,y)
-  idx = grid_vector(x,y)
-  return toggles[idx]
-end
-
-local function set_toggles_value(x,y,val)
-  idx = grid_vector(x,y)
-  toggles[idx] = val
-end
-
-local function bool_to_int(value)
-  return value and 1 or 0
-end
-
+-- arc helper functions
 local function assign_next_arc_enc()
   enc = 0
   for i=1,4 do
@@ -133,14 +159,28 @@ local function remove_arc_enc(x,y)
   end
 end
 
+local function arc_encoder_is_assigned(n)
+  result = false
+  for i=1,4 do
+    if arc_mapping[i][2] == n then
+      result = true
+    end
+  end
+  return result
+end
+
+-- Control the state of the phase modulation grid, get/set toggles, assign arc encoder,
+-- draw modulation parameter on arc LED ring, light/dim grid LED
 local function grid_phase_state(x,y,z)
-  local op_out = x-start_pos[1]+1
-  local op_in = y-start_pos[2]+1
+  local op_out = x - start_pos[1]+1
+  local op_in = y - start_pos[2]+1
   local toggle = get_toggles_value(x,y)
   if z == 1 then
     toggle = not toggle
     set_toggles_value(x,y,toggle)
       if toggle then
+        -- this is a bit confusing. The logic should be based on the presense of an arc, not the value
+        -- of a variable. if an arc is not present, assign encoder 3 to control phase mod matrix
         if phase_max_keys > 1 then
           local arc_enc = assign_next_arc_enc()
           arc_mapping[arc_enc] = {grid_vector(x,y),arc_enc,"hz"..op_out.."_to_hz"..op_in}
@@ -157,6 +197,7 @@ local function grid_phase_state(x,y,z)
   end
 end
 
+-- control the state of the output vector, using the carriers table
 local function output_vector_state(x,y,z)
   idx = y - 1
   if carriers[idx] ~= 1 then
@@ -168,6 +209,9 @@ local function output_vector_state(x,y,z)
   g:led(x,y,3+carriers[idx]*9)
 end
 
+-- enable a momentary switch to enable encoder 2 to control the frequency ratio
+-- for this operator.
+-- TODO: add toggles and limit to one at a time
 local function frequency_vector_state(x,y,z)
   if z == 1 then
     enc_mapping[2] = "hz"..y - start_pos[2] + 1
@@ -178,6 +222,7 @@ local function frequency_vector_state(x,y,z)
   g:led(x,y,3+z*12)
 end
 
+-- callback function for key presses on the grid
 function g.key(x,y,z)
   -- phase mod matrix updates
   if x < (start_pos[1] + size[1]) and y >= start_pos[2] and y < (start_pos[2] + size[2]) then
@@ -202,16 +247,9 @@ function g.key(x,y,z)
   pattern_control(x,y,z)
 end
 
-local function arc_encoder_is_assigned(n)
-  result = false
-  for i=1,4 do
-    if arc_mapping[i][2] == n then
-      result = true
-    end
-  end
-  return result
-end
-
+-- Control parameters when an encoder (arc or norns) is moved.
+-- Draw rounded up value to OLED grid, as a visual indicator for the user.
+-- This function could be split up a bit.
 local function update_phase_matrix(n,d)
   if arc_encoder_is_assigned(n) then
     params:delta(arc_mapping[n][3], d/10)
@@ -226,7 +264,9 @@ local function update_phase_matrix(n,d)
   elseif enc_mapping[3] then
     params:delta(enc_mapping[3],d/2)
     local screen_val = math.ceil(params:get(enc_mapping[3]))
-    idx = tab.key(toggles,true)
+    -- this is a hack to get the first phase mod grid key,
+    -- because when there is no arc, we are limited to 1 encoder
+    local idx = tab.key(toggles,true)
     local x = (idx % size[1]) == 0 and size[1] or idx % size[1]
     local y = math.ceil(idx / size[2])
     mods[x][y] = screen_val
@@ -234,6 +274,7 @@ local function update_phase_matrix(n,d)
   end
 end
 
+-- callback function when arc encoder is turned
 function a.delta(n,d)
   if n == 1 then
     update_phase_matrix(n,d)
@@ -247,17 +288,22 @@ function a.delta(n,d)
 end
 
 function init()
+  -- connect to first MIDI device, set callback function
   m = midi.connect()
   m.event = midi_event
   
+  -- create a new pattern_time object, set callback function
   pat = pattern_time.new()
   pat.process = grid_note_trans
 
+  -- set amplitude to 0.05, stop everything at init
   engine.amp(0.05)
   engine.stopAll()
 
+  -- load all parameters from included library
   FM7.add_params()
 
+  -- if a grid is attached, initialize our grid
   if g then 
     draw_phase_matrix()
     draw_output_vector()
@@ -265,14 +311,19 @@ function init()
     gridredraw()
   end
   
+  -- if we have an arc, set max grid mod toggles to 4
   if a.device then phase_max_keys = 4 end
 
+  -- make a screen refresh metronome, set a callback function
   screen_refresh_metro = metro.init()
   screen_refresh_metro.event = function(stage)
     redraw()
   end
+  -- start the metro at 15 Hz
   screen_refresh_metro:start(1 / screen_framerate)
 
+  -- initialize the OLED screen with phase mod values, also carrier values
+  -- This should be refactored
   for m = 1,6 do
     selected[m] = {}
     mods[m] = {}
@@ -282,16 +333,21 @@ function init()
       mods[m][n] = 0
     end
   end
+  -- TODO: what are these variables?
+  -- a light?
   light = 0
+  -- a number?
   number = 3
 -- fill up our toggle table with false values
   for i=1,6*6 do
     table.insert(toggles,false)
   end
 
+  -- make a new pages collection, with a single page, starting on the first page
   pages = UI.Pages.new(1, 1)
 end
 
+-- copy paste from @tehn earthsea library
 function pattern_control(x, y, z)
   if x == 16 and y > 1 and y < 8 then
     if z == 1 then
@@ -400,6 +456,7 @@ function gridredraw()
   g:refresh()
 end
 
+-- OLED drawing function for phase mod page
 local function draw_matrix_outputs()
   for m = 1,6 do
     for n = 1,6 do
@@ -426,6 +483,7 @@ local function draw_matrix_outputs()
   end  
 end
 
+-- callbacks for norns encoders
 function enc(n,delta)
   if n == 1 then
     params:delta(enc_mapping[2],delta/4)
@@ -438,6 +496,8 @@ function enc(n,delta)
   end
 end
 
+-- function to set random settings when key 2 is pressed
+-- TODO: this is broken
 local function set_random_phase_mods(n)
     -- clear selected
     for x = 1,6 do
@@ -460,6 +520,7 @@ local function set_random_phase_mods(n)
     end
 end
 
+-- callback for norns key presses
 function key(n,z)
   if n == 2 and z== 1 then
     set_random_phase_mods(number)
@@ -480,78 +541,7 @@ function key(n,z)
   end
 end
 
-local algo_box_coords = 
-  {
---[[
-absolute coords for operator box positions
- 5|
-21|
-37|
-53|__ __ __ __ __ ___
-   32 48 64 80 96 112
-   
-    tuples in table are {x coord, y coord, connection_index,feedback_index}
---]]
-    {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,0},{64,21,4,0},{64,5,5,6}},
-    {{48,53,0,0},{48,37,1,2},{64,53,0,0},{64,37,3,0},{64,21,4,0},{64,5,5,0}},
-    {{48,53,0,0},{48,37,1,0},{48,21,2,0},{64,53,0,0},{64,37,4,0},{64,21,5,6}},
-    {{48,53,0,0},{48,37,1,0},{48,21,2,0},{64,53,0,6},{64,37,4,0},{64,21,5,0}},
-    {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,0},{80,53,0,0},{80,37,5,6}},
-    {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,0},{80,53,0,6},{80,37,5,0}},
-    {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,0},{80,37,3,0},{80,21,5,6}},
-    {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,4},{80,37,3,0},{80,21,5,0}},
-    {{48,53,0,0},{48,37,1,2},{64,53,0,0},{64,37,3,0},{80,37,3,0},{80,21,5,0}},
-    {{48,53,0,0},{48,37,1,0},{48,21,2,3},{64,53,0,0},{80,37,4,0},{64,37,4,0}},
-    {{48,53,0,0},{48,37,1,0},{48,21,2,0},{64,53,0,0},{80,37,4,0},{64,37,4,6}},
-    {{32,53,0,0},{32,37,1,2},{64,53,0,0},{48,37,3,0},{64,37,3,0},{80,37,3,0}},
-    {{32,53,0,0},{32,37,1,0},{64,53,0,0},{48,37,3,0},{64,37,3,0},{80,37,3,6}},
-    {{32,53,0,0},{32,37,1,0},{64,53,0,0},{64,37,3,0},{80,37,4,0},{64,21,4,6}},
-    {{32,53,0,0},{32,37,1,2},{64,53,0,0},{64,37,3,0},{80,37,4,0},{64,21,4,0}},
-    {{64,53,0,0},{48,37,1,0},{64,37,1,0},{64,21,3,0},{80,37,1,0},{80,21,5,6}},
-    {{64,53,0,0},{48,37,1,2},{64,37,1,0},{64,21,3,0},{80,37,1,0},{80,21,5,0}},
-    {{64,53,0,0},{48,37,1,0},{64,37,1,3},{80,37,1,0},{80,21,4,0},{80,5,5,0}},
-    {{48,53,0,0},{48,37,1,0},{48,21,2,0},{64,53,0,0},{80,53,0,0},{64,37,{4,5},6}},
-    {{32,53,0,0},{48,53,0,0},{32,37,{1,2},3},{80,53,0,0},{64,37,4,0},{80,37,4,0}},
-    {{32,53,0,0},{48,53,0,0},{32,37,{1,2},3},{64,53,0,0},{80,53,0,0},{64,37,{4,5},0}},
-    {{32,53,0,0},{32,37,1,0},{48,53,0,0},{64,53,0,0},{80,53,0,0},{64,37,{3,4,5},6}},
-    {{32,53,0,0},{48,53,0,0},{48,37,3,0},{64,53,0,0},{80,53,0,0},{64,37,{4,5},6}},
-    {{32,53,0,0},{48,53,0,0},{64,53,0,0},{80,53,0,0},{96,53,0,0},{80,37,{3,4,5},6}},
-    {{32,53,0,0},{48,53,0,0},{64,53,0,0},{80,53,0,0},{96,53,0,0},{80,37,{4,5},6}},
-    {{32,53,0,0},{48,53,0,0},{48,37,2,3},{80,53,0,0},{64,37,4,0},{80,37,4,0}},
-    {{32,53,0,0},{48,53,0,0},{48,37,2,3},{80,53,0,0},{64,37,4,0},{80,37,4,0}},
-    {{48,53,0,0},{48,37,1,0},{64,53,0,0},{64,37,3,0},{64,21,4,5},{80,53,0,0}},
-    {{32,53,0,0},{48,53,0,0},{64,53,0,0},{64,37,3,0},{80,53,0,0},{80,37,5,6}},
-    {{32,53,0,0},{48,53,0,0},{64,53,0,0},{64,37,3,0},{64,21,4,5},{80,53,0,0}},
-    {{32,53,0,0},{48,53,0,0},{64,53,0,0},{80,53,0,0},{96,53,0,0},{96,37,5,6}},
-    {{32,53,0,0},{48,53,0,0},{64,53,0,0},{80,53,0,0},{96,53,0,0},{112,53,0,6}}
-  }
-
-local function draw_algo(num)
-    screen.move(0,10)
-    screen.text("algo "..num)
-    local size = 9
-    local text_coords = {2,6}
-  for a = 1,6 do
-    local x = algo_box_coords[num][a][1]
-    local y = algo_box_coords[num][a][2]
-    local conn = algo_box_coords[num][a][3]
-    local fb = algo_box_coords[num][a][4]
-    if type(conn) == "number" then
-      if conn > 0 then
-        -- this is a line going down to the next box
-        -- need a line going across to the next box
-        -- and a line feedbacking to an arbitrary box
-        screen.move(x+size/2,y+size)
-        screen.line(x+size/2,y+16)
-      end
-    end
-    screen.rect(x,y,size,size)
-    screen.move_rel(text_coords[1], text_coords[2])
-    screen.text(a)
-    screen.stroke()
-  end
-end
-
+-- callback to redraw the OLED
 function redraw()
   screen.clear()
   pages:redraw()
@@ -561,6 +551,7 @@ function redraw()
   if pages.index == 1 then
     draw_matrix_outputs()
   else
+    -- this has been moved to lib/
     draw_algo(pages.index - 1)
   end
   --]]
@@ -568,6 +559,8 @@ function redraw()
   screen.update()
 end
 
+-- note on/off functions for synth engine
+-- TODO: pass velocity value to engine amplitude
 local function note_on(note, vel)
   if nvoices < MAX_NUM_VOICES then
     --engine.start(id, getHz(x, y-1))
@@ -581,6 +574,7 @@ local function note_off(note, vel)
   nvoices = nvoices - 1
 end
 
+-- callback function for MIDI events
 function midi_event(data)
   if #data == 0 then return end
   local msg = midi.to_msg(data)
@@ -612,6 +606,7 @@ function midi_event(data)
   end
 end
 
+-- callback when script is unloaded
 function cleanup()
   pat:stop()
   pat = nil
