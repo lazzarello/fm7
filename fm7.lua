@@ -179,12 +179,11 @@ local function grid_phase_state(x,y,z)
     toggle = not toggle
     set_toggles_value(x,y,toggle)
       if toggle then
-        -- this is a bit confusing. The logic should be based on the presense of an arc, not the value
-        -- of a variable. if an arc is not present, assign encoder 3 to control phase mod matrix
-        if phase_max_keys > 1 then
+        if a.device then
           local arc_enc = assign_next_arc_enc()
           arc_mapping[arc_enc] = {grid_vector(x,y),arc_enc,"hz"..op_out.."_to_hz"..op_in}
           a:segment(arc_mapping[arc_enc][2],0,params:get(arc_mapping[arc_enc][3]),12)
+          enc_mapping[3] = false
         else
           enc_mapping[3] = "hz"..op_out.."_to_hz"..op_in
         end
@@ -483,13 +482,15 @@ end
 
 -- callbacks for norns encoders
 function enc(n,delta)
-  if n == 1 then
-    params:delta(enc_mapping[2],delta/8)
-    draw_matrix_outputs()
-  elseif n == 2 then
-    params:delta(enc_mapping[2],delta/16)
-    draw_matrix_outputs()
-  elseif n == 3 then
+  if enc_mapping[2] then
+    if n == 1 then
+      params:delta(enc_mapping[2],delta/8)
+      draw_matrix_outputs()
+    elseif n == 2 then
+      params:delta(enc_mapping[2],delta/16)
+      draw_matrix_outputs()
+    end
+  elseif enc_mapping[3] and n == 3 then
     update_phase_matrix(n,delta)
   end
 end
