@@ -33,7 +33,7 @@ g = grid.connect()
 a = arc.connect()
 
 -- require params library, why is this local to ~/dust/code and not . ?
-local FM7 = require 'fm7/lib/fm7'
+local FM7 = include('fm7/lib/fm7')
 -- helpers to work with tables
 local tab = require 'tabutil'
 -- helpers to record and playback patterns on a grid
@@ -336,8 +336,6 @@ function init()
   -- TODO: what are these variables?
   -- a light?
   light = 0
-  -- a number?
-  number = 3
 -- fill up our toggle table with false values
   for i=1,6*6 do
     table.insert(toggles,false)
@@ -468,7 +466,7 @@ local function draw_matrix_outputs()
       end
       screen.level(l)
       screen.move_rel(2, 6)
-      screen.text(mods[m][n])
+      screen.text(math.ceil(mods[m][n]))
       screen.stroke()
     end
   end
@@ -486,10 +484,10 @@ end
 -- callbacks for norns encoders
 function enc(n,delta)
   if n == 1 then
-    params:delta(enc_mapping[2],delta/4)
+    params:delta(enc_mapping[2],delta/8)
     draw_matrix_outputs()
   elseif n == 2 then
-    params:delta(enc_mapping[2],delta/10)
+    params:delta(enc_mapping[2],delta/16)
     draw_matrix_outputs()
   elseif n == 3 then
     update_phase_matrix(n,delta)
@@ -514,7 +512,7 @@ local function set_random_phase_mods(n)
       x = math.random(6)
       y = math.random(6)
       selected[x][y] = 1
-      mods[x][y] = 1 
+      mods[x][y] = math.random()*tau 
       params:set("hz"..x.."_to_hz"..y,mods[x][y])
       grid_phase_state(x,y+1,1)
     end
@@ -523,7 +521,7 @@ end
 -- callback for norns key presses
 function key(n,z)
   if n == 2 and z== 1 then
-    set_random_phase_mods(number)
+    set_random_phase_mods(4)
     redraw()
     gridredraw()
   end
